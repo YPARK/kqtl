@@ -1,0 +1,9 @@
+---
+author: "Yongjin Park"
+---
+
+# Basic idea
+
+* Use profiles of transcription factors as modulator terms
+
+
