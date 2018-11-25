@@ -1,1 +1,1 @@
-# tfqtl
+# Kernelized causal QTL discovery
