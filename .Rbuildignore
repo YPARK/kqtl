@@ -1,0 +1,7 @@
+^README.+
+^kqtl.+
+^note.+
+^temp.+
+.clang-format
+docs
+Makefile
