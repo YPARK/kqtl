@@ -31,7 +31,9 @@ normalized.laplacian <- function(W, tau = 1) {
 
     options <- list(laplcian.tau = tau)
 
-    return(.Call('rcpp_laplacian', W, options, PACKAGE = 'kqtl'))
+    ret <- .Call('rcpp_laplacian', W, options, PACKAGE = 'kqtl')
+    ret$tau  <- tau
+    return(ret)
 }
 
 
@@ -67,11 +69,27 @@ normalized.gdk.eigen <- function(W, tau = 1, beta = .5) {
 
     options <- list(laplcian.tau = tau, gdk.beta = beta)
 
-    return(.Call('rcpp_gdk_eigen', W, options, PACKAGE = 'kqtl'))
+    ret <- .Call('rcpp_gdk_eigen', W, options, PACKAGE = 'kqtl')
+    ret$tau <- tau
+    ret$beta <- beta
+    return(ret)
 }
 
-
-
+################################################################
+#' Compute Graph Diffusion Kernel from the eigen decomposition
+#'
+#' @export
+#' @name gdk.from.eigen
+#'
+#' @usage gdk.from.eigen(gdk)
+#'
+#' @param gdk Eigen decomposition of GDK
+#' @return K GDK matrix
+#'
+gdk.from.eigen <- function(gdk) {
+    K <- t(gdk$vectors) %*% sweep(gdk$vectors, 1, gdk$values, `*`)
+    return(K)
+}
 
 ################################################################
 #' Variational inference of kernelized QTL model
@@ -127,6 +145,52 @@ normalized.gdk.eigen <- function(W, tau = 1, beta = .5) {
 #'
 #' @examples
 #'
+#' set.seed(1)
+#' 
+#' ## block model
+#' n.sub = 20
+#' n.blk = 10
+#' n = n.sub * n.blk
+#' Z = matrix(0, n, n.blk)
+#' idx = as.matrix(data.frame(i = 1:n, j = sample(n.blk, n, TRUE)))
+#' Z[idx] = 1
+#' Pr = matrix(runif(n.blk*n.blk), n.blk, n.blk) * 0.4 / (n.blk - 1)
+#' diag(Pr) = .6
+#' W = Z %*% Pr %*% t(Z)
+#' n.o = order(idx[,2])
+#' 
+#' gdk = kqtl::normalized.gdk.eigen(W, tau=1e-4, beta=.99)
+#' K = t(gdk$vectors) %*% sweep(gdk$vectors, 1, gdk$values, `*`)
+#'
+#' K.vis = K
+#' diag(K.vis) = 0
+#' library(Matrix)
+#' image(Matrix(K.vis[n.o, n.o]))
+#'
+#' ## sample z-scores
+#' n.causal = 3
+#' causal.genes = sample(n, n.causal)
+#' v.true = .9
+#' z.true = matrix(0, n, 1)
+#' z.true[causal.genes, 1] = rnorm(n.causal) * sqrt(v.true / n.causal)
+#' z.noise = matrix(rnorm(n), n, 1) * sqrt((1 - v.true) / n)
+#' z.obs = 4 * (K %*% z.true + z.noise)
+#' z.se = matrix(1, n, 1)
+#'
+#' ## Fit the model
+#' out = kqtl::fit.kqtl(z.obs, z.se, gdk, pi = 0)
+#' 
+#' .plot = function(...) plot(..., pch = 19, cex = .5, col = 'gray50')
+#' par(mfrow=c(2, 2))
+#' .plot(1:n, z.obs, xlab = 'genes', ylab = 'Zobs')
+#' points(causal.genes, z.obs[causal.genes], col = 2)
+#' .plot(1:n, out$param$lodds, xlab = 'genes', ylab = 'PIP')
+#' points(causal.genes, out$param$lodds[causal.genes], col = 2)
+#' .plot(z.obs, out$param$theta, xlab = 'Zobs', ylab = 'theta')
+#' points(z.obs[causal.genes], out$param$theta[causal.genes], col = 2)
+#' .plot(z.true, out$param$theta, xlab = 'Ztrue', ylab = 'theta')
+#' points(z.true[causal.genes], out$param$theta[causal.genes], col = 2)
+#' 
 fit.kqtl <- function(effect,              # marginal effect : y ~ x
                      effect.se,           # marginal se : y ~ x
                      kernel.eigen,        # eigen decomposition
@@ -210,7 +274,6 @@ fit.kqtl <- function(effect,              # marginal effect : y ~ x
             options[[v]] <- val
         }
     }
-    options[['sample.size']] <- n
 
     ## call R/C++ functions ##
     if(factored) {
